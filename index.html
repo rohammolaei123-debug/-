@@ -4,187 +4,575 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<title>Roham Car Game V1</title>
+<title>Roham Car Game 3D V2</title>
 
 <style>
 *{
   box-sizing:border-box;
   -webkit-tap-highlight-color:transparent;
 }
-
 html,body{
   margin:0;
   width:100%;
   height:100%;
   overflow:hidden;
-  background:#20252b;
-  font-family:Arial,sans-serif;
+  background:#87ceeb;
   touch-action:none;
+  font-family:Arial,sans-serif;
 }
-
-canvas{
-  display:block;
-  width:100%;
-  height:100%;
-}
-
-#top{
+#game{
   position:fixed;
-  top:10px;
-  left:10px;
-  right:10px;
+  inset:0;
+}
+#hud{
+  position:fixed;
+  top:12px;
+  left:12px;
+  right:12px;
   display:flex;
   justify-content:space-between;
-  align-items:flex-start;
   z-index:10;
+  pointer-events:none;
 }
-
 .panel{
-  background:rgba(15,20,25,.88);
+  background:rgba(10,15,20,.78);
   color:white;
-  padding:10px;
-  border-radius:12px;
-  font-size:13px;
-}
-
-button,input{
-  font:inherit;
-}
-
-button{
-  border:0;
-  border-radius:10px;
   padding:10px 13px;
-  font-weight:bold;
-  background:#eee;
-  color:#111;
+  border-radius:12px;
+  font-size:14px;
 }
-
-input{
-  width:100px;
-  padding:10px;
-  border:1px solid #777;
-  border-radius:10px;
-  background:#111820;
-  color:white;
-  text-align:center;
-}
-
 #controls{
   position:fixed;
   left:0;
   right:0;
-  bottom:18px;
+  bottom:20px;
   display:flex;
   justify-content:space-between;
-  padding:0 18px;
+  padding:0 20px;
   z-index:20;
   pointer-events:none;
 }
-
 .group{
   display:flex;
   gap:10px;
   pointer-events:auto;
 }
-
-.control{
+.btn{
   width:72px;
   height:72px;
+  border:0;
   border-radius:50%;
-  background:rgba(10,15,20,.82);
+  background:rgba(15,20,25,.82);
   color:white;
+  font-size:25px;
+  font-weight:bold;
   border:2px solid rgba(255,255,255,.25);
-  font-size:24px;
   touch-action:none;
 }
-
-.control.big{
+.btn.big{
   width:82px;
   border-radius:20px;
   font-size:15px;
 }
-
-.control:active{
-  transform:scale(.94);
+.btn:active{
+  transform:scale(.93);
 }
 </style>
 </head>
 
 <body>
 
-<canvas id="game"></canvas>
+<div id="game"></div>
 
-<div id="top">
-
+<div id="hud">
   <div class="panel">
-    <b>Roham Car Game V1</b><br>
-    <span id="status">حالت تک‌نفره</span>
+    <b>Roham Car Game 3D</b><br>
+    <span id="speed">سرعت: 0 km/h</span>
   </div>
 
   <div class="panel">
-    <button id="createRoom">ساخت اتاق</button>
-    <input id="roomCode" placeholder="کد اتاق">
-    <button id="joinRoom">ورود</button>
+    V2 — سه‌بعدی
   </div>
-
 </div>
 
 <div id="controls">
 
   <div class="group">
-    <button class="control" id="left">◀</button>
-    <button class="control" id="right">▶</button>
+    <button class="btn" id="left">◀</button>
+    <button class="btn" id="right">▶</button>
   </div>
 
   <div class="group">
-    <button class="control big" id="brake">ترمز</button>
-    <button class="control big" id="gas">گاز</button>
+    <button class="btn big" id="brake">ترمز</button>
+    <button class="btn big" id="gas">گاز</button>
   </div>
 
 </div>
 
-<!-- ارتباط آزمایشی آنلاین -->
-<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<script type="module">
 
-<script>
+import * as THREE from
+"https://unpkg.com/three@0.160.0/build/three.module.js";
 
-const canvas = document.getElementById("game");
-const ctx = canvas.getContext("2d");
+const game = document.getElementById("game");
+const speedText = document.getElementById("speed");
 
-const statusText = document.getElementById("status");
-const roomCode = document.getElementById("roomCode");
+/* -------------------------
+   Scene
+------------------------- */
 
-let W = 0;
-let H = 0;
+const scene = new THREE.Scene();
 
-function resize(){
+scene.background = new THREE.Color(0x87ceeb);
 
-  W = window.innerWidth;
-  H = window.innerHeight;
+scene.fog = new THREE.Fog(
+  0x87ceeb,
+  60,
+  450
+);
 
-  canvas.width = W * devicePixelRatio;
-  canvas.height = H * devicePixelRatio;
+/* -------------------------
+   Camera
+------------------------- */
 
-  canvas.style.width = W + "px";
-  canvas.style.height = H + "px";
+const camera = new THREE.PerspectiveCamera(
+  65,
+  innerWidth / innerHeight,
+  0.1,
+  1000
+);
 
-  ctx.setTransform(
-    devicePixelRatio,
+camera.position.set(
+  0,
+  6,
+  11
+);
+
+/* -------------------------
+   Renderer
+------------------------- */
+
+const renderer = new THREE.WebGLRenderer({
+  antialias:true,
+  powerPreference:"high-performance"
+});
+
+renderer.setPixelRatio(
+  Math.min(devicePixelRatio,1.5)
+);
+
+renderer.setSize(
+  innerWidth,
+  innerHeight
+);
+
+renderer.shadowMap.enabled = false;
+
+game.appendChild(renderer.domElement);
+
+/* -------------------------
+   Light
+------------------------- */
+
+const ambient = new THREE.HemisphereLight(
+  0xffffff,
+  0x555555,
+  1.5
+);
+
+scene.add(ambient);
+
+const sun = new THREE.DirectionalLight(
+  0xffffff,
+  1.2
+);
+
+sun.position.set(
+  50,
+  100,
+  50
+);
+
+scene.add(sun);
+
+/* -------------------------
+   Ground
+------------------------- */
+
+const groundMat =
+  new THREE.MeshLambertMaterial({
+    color:0x39733f
+  });
+
+const ground =
+  new THREE.Mesh(
+    new THREE.PlaneGeometry(
+      1000,
+      1000
+    ),
+    groundMat
+  );
+
+ground.rotation.x =
+  -Math.PI / 2;
+
+ground.position.y = -0.05;
+
+scene.add(ground);
+
+/* -------------------------
+   Road
+------------------------- */
+
+const roadMat =
+  new THREE.MeshLambertMaterial({
+    color:0x33373b
+  });
+
+const road =
+  new THREE.Mesh(
+    new THREE.PlaneGeometry(
+      18,
+      1000
+    ),
+    roadMat
+  );
+
+road.rotation.x =
+  -Math.PI / 2;
+
+scene.add(road);
+
+/* -------------------------
+   Road lines
+------------------------- */
+
+const lineMat =
+  new THREE.MeshBasicMaterial({
+    color:0xffffff
+  });
+
+for(let z=-480; z<500; z+=20){
+
+  const line =
+    new THREE.Mesh(
+      new THREE.BoxGeometry(
+        0.35,
+        0.03,
+        9
+      ),
+      lineMat
+    );
+
+  line.position.set(
     0,
-    0,
-    devicePixelRatio,
-    0,
+    0.03,
+    z
+  );
+
+  scene.add(line);
+}
+
+/* -------------------------
+   Sidewalks
+------------------------- */
+
+const sidewalkMat =
+  new THREE.MeshLambertMaterial({
+    color:0x777777
+  });
+
+for(const x of [-10,10]){
+
+  const sidewalk =
+    new THREE.Mesh(
+      new THREE.BoxGeometry(
+        3,
+        0.25,
+        1000
+      ),
+      sidewalkMat
+    );
+
+  sidewalk.position.set(
+    x,
+    0.12,
     0
+  );
+
+  scene.add(sidewalk);
+}
+
+/* -------------------------
+   Buildings
+------------------------- */
+
+function createBuilding(
+  x,
+  z,
+  w,
+  h,
+  d
+){
+
+  const mat =
+    new THREE.MeshLambertMaterial({
+      color:
+        new THREE.Color(
+          0.25 +
+          Math.random()*0.35,
+          0.25 +
+          Math.random()*0.35,
+          0.25 +
+          Math.random()*0.35
+        )
+    });
+
+  const building =
+    new THREE.Mesh(
+      new THREE.BoxGeometry(
+        w,
+        h,
+        d
+      ),
+      mat
+    );
+
+  building.position.set(
+    x,
+    h/2,
+    z
+  );
+
+  scene.add(building);
+
+  /* windows */
+
+  for(
+    let yy=2;
+    yy<h-1;
+    yy+=3
+  ){
+
+    for(
+      let zz=z-d/2+1;
+      zz<z+d/2;
+      zz+=3
+    ){
+
+      const windowMat =
+        new THREE.MeshBasicMaterial({
+          color:0xffe69a
+        });
+
+      const win =
+        new THREE.Mesh(
+          new THREE.BoxGeometry(
+            0.08,
+            1,
+            1.2
+          ),
+          windowMat
+        );
+
+      const side =
+        x < 0
+        ? -1
+        : 1;
+
+      win.position.set(
+        x + side*w/2,
+        yy,
+        zz
+      );
+
+      scene.add(win);
+    }
+  }
+}
+
+/* شهر دو طرف خیابان */
+
+for(let z=-450;z<450;z+=35){
+
+  createBuilding(
+    -16-Math.random()*8,
+    z,
+    8,
+    8+Math.random()*15,
+    20
+  );
+
+  createBuilding(
+    16+Math.random()*8,
+    z+15,
+    8,
+    7+Math.random()*18,
+    18
   );
 }
 
-window.addEventListener("resize",resize);
-resize();
+/* -------------------------
+   Car
+------------------------- */
 
+const car =
+  new THREE.Group();
+
+scene.add(car);
+
+car.position.set(
+  0,
+  0,
+  10
+);
+
+/* body */
+
+const bodyMat =
+  new THREE.MeshLambertMaterial({
+    color:0x1597e5
+  });
+
+const body =
+  new THREE.Mesh(
+    new THREE.BoxGeometry(
+      2.2,
+      0.65,
+      4
+    ),
+    bodyMat
+  );
+
+body.position.y =
+  0.65;
+
+car.add(body);
+
+/* roof */
+
+const roofMat =
+  new THREE.MeshLambertMaterial({
+    color:0x0d5d91
+  });
+
+const roof =
+  new THREE.Mesh(
+    new THREE.BoxGeometry(
+      1.65,
+      0.6,
+      2
+    ),
+    roofMat
+  );
+
+roof.position.set(
+  0,
+  1.15,
+  0
+);
+
+car.add(roof);
+
+/* windows */
+
+const glassMat =
+  new THREE.MeshBasicMaterial({
+    color:0x172a3a
+  });
+
+const frontWindow =
+  new THREE.Mesh(
+    new THREE.BoxGeometry(
+      1.5,
+      0.45,
+      0.05
+    ),
+    glassMat
+  );
+
+frontWindow.position.set(
+  0,
+  1.17,
+  -1.02
+);
+
+car.add(frontWindow);
+
+const backWindow =
+  frontWindow.clone();
+
+backWindow.position.z = 1.02;
+
+car.add(backWindow);
+
+/* wheels */
+
+const wheelMat =
+  new THREE.MeshLambertMaterial({
+    color:0x111111
+  });
+
+function makeWheel(x,z){
+
+  const wheel =
+    new THREE.Mesh(
+      new THREE.CylinderGeometry(
+        0.43,
+        0.43,
+        0.28,
+        16
+      ),
+      wheelMat
+    );
+
+  wheel.rotation.z =
+    Math.PI/2;
+
+  wheel.position.set(
+    x,
+    0.45,
+    z
+  );
+
+  car.add(wheel);
+}
+
+makeWheel(-1.15,-1.35);
+makeWheel(1.15,-1.35);
+makeWheel(-1.15,1.35);
+makeWheel(1.15,1.35);
+
+/* headlights */
+
+const lightMat =
+  new THREE.MeshBasicMaterial({
+    color:0xffffcc
+  });
+
+for(const x of [-0.65,0.65]){
+
+  const light =
+    new THREE.Mesh(
+      new THREE.BoxGeometry(
+        0.35,
+        0.18,
+        0.08
+      ),
+      lightMat
+    );
+
+  light.position.set(
+    x,
+    0.78,
+    -2.02
+  );
+
+  car.add(light);
+}
 
 /* -------------------------
-   کنترل‌ها
+   Controls
 ------------------------- */
 
 const controls = {
@@ -194,549 +582,230 @@ const controls = {
   brake:false
 };
 
-function controlButton(id,name){
+function setupButton(
+  id,
+  key
+){
 
-  const button = document.getElementById(id);
+  const b =
+    document.getElementById(id);
 
-  button.addEventListener("pointerdown",e=>{
-    e.preventDefault();
-    controls[name]=true;
-  });
+  b.addEventListener(
+    "pointerdown",
+    e=>{
+      e.preventDefault();
+      controls[key]=true;
+    }
+  );
 
-  button.addEventListener("pointerup",e=>{
-    e.preventDefault();
-    controls[name]=false;
-  });
+  b.addEventListener(
+    "pointerup",
+    e=>{
+      e.preventDefault();
+      controls[key]=false;
+    }
+  );
 
-  button.addEventListener("pointercancel",()=>{
-    controls[name]=false;
-  });
+  b.addEventListener(
+    "pointercancel",
+    ()=>{
+      controls[key]=false;
+    }
+  );
 
-  button.addEventListener("pointerleave",()=>{
-    controls[name]=false;
-  });
+  b.addEventListener(
+    "pointerleave",
+    ()=>{
+      controls[key]=false;
+    }
+  );
 }
 
-controlButton("left","left");
-controlButton("right","right");
-controlButton("gas","gas");
-controlButton("brake","brake");
-
-
-/* -------------------------
-   ماشین بازیکن
-------------------------- */
-
-const player = {
-
-  x:0,
-  y:0,
-  angle:0,
-  speed:0
-
-};
-
+setupButton("left","left");
+setupButton("right","right");
+setupButton("gas","gas");
+setupButton("brake","brake");
 
 /* -------------------------
-   ماشین دوست
+   Driving
 ------------------------- */
 
-const otherPlayer = {
+let speed = 0;
+let steering = 0;
 
-  x:200,
-  y:0,
-  angle:0,
-  speed:0
-
-};
-
-let otherVisible = false;
-
-
-/* -------------------------
-   فیزیک ساده ماشین
-------------------------- */
+const maxSpeed = 55;
+const acceleration = 28;
+const brakePower = 50;
+const friction = 8;
 
 function updateCar(dt){
 
-  let acceleration = 0;
+  /* gas */
 
   if(controls.gas){
-    acceleration = 180;
+
+    speed +=
+      acceleration * dt;
   }
+
+  /* brake */
 
   if(controls.brake){
-    acceleration = -260;
+
+    speed -=
+      brakePower * dt;
   }
 
-  player.speed += acceleration * dt;
-
-  /* اصطکاک */
-
-  if(!controls.gas && !controls.brake){
-
-    if(player.speed > 0)
-      player.speed -= 45 * dt;
-
-    if(player.speed < 0)
-      player.speed += 45 * dt;
-
-  }
-
-  /* محدودیت سرعت */
-
-  player.speed = Math.max(
-    -80,
-    Math.min(300,player.speed)
-  );
-
-
-  /* فرمان */
-
-  let steering = 0;
-
-  if(controls.left)
-    steering -= 1;
-
-  if(controls.right)
-    steering += 1;
-
-
-  if(Math.abs(player.speed) > 5){
-
-    player.angle +=
-      steering *
-      1.8 *
-      dt *
-      Math.min(Math.abs(player.speed)/100,1.5);
-
-  }
-
-
-  /* حرکت */
-
-  player.x +=
-    Math.sin(player.angle) *
-    player.speed *
-    dt;
-
-  player.y -=
-    Math.cos(player.angle) *
-    player.speed *
-    dt;
-
-}
-
-
-/* -------------------------
-   رسم ماشین
-------------------------- */
-
-function drawCar(x,y,angle,label,type){
-
-  ctx.save();
-
-  /*
-    دوربین بازیکن را وسط صفحه نگه می‌داریم
-  */
-
-  const screenX =
-    W/2 + (x-player.x)*0.7;
-
-  const screenY =
-    H/2 + (y-player.y)*0.7;
-
-  ctx.translate(screenX,screenY);
-
-  ctx.rotate(angle);
-
-  /* سایه */
-
-  ctx.fillStyle="rgba(0,0,0,.35)";
-  ctx.fillRect(-18,-32,36,64);
-
-  /* بدنه */
-
-  if(type==="player")
-    ctx.fillStyle="#18a7ff";
-  else
-    ctx.fillStyle="#ff9f1c";
-
-  ctx.fillRect(-15,-28,30,56);
-
-  /* شیشه */
-
-  ctx.fillStyle="#17212b";
-  ctx.fillRect(-11,-17,22,15);
-
-  /* چرخ‌ها */
-
-  ctx.fillStyle="#080b0d";
-
-  ctx.fillRect(-19,-20,6,14);
-  ctx.fillRect(13,-20,6,14);
-
-  ctx.fillRect(-19,8,6,14);
-  ctx.fillRect(13,8,6,14);
-
-  /* چراغ‌ها */
-
-  ctx.fillStyle="#fff";
-  ctx.fillRect(-10,-29,7,4);
-  ctx.fillRect(3,-29,7,4);
-
-  /* نام */
-
-  ctx.fillStyle="white";
-  ctx.font="bold 12px Arial";
-  ctx.textAlign="center";
-  ctx.fillText(label,0,-40);
-
-  ctx.restore();
-
-}
-
-
-/* -------------------------
-   محیط
-------------------------- */
-
-function drawWorld(){
-
-  ctx.fillStyle="#344b35";
-  ctx.fillRect(0,0,W,H);
-
-  /*
-    خطوط زمین
-  */
-
-  ctx.strokeStyle="#526d54";
-  ctx.lineWidth=2;
-
-  const grid=100;
-
-  const offsetX =
-    W/2 - (player.x*0.7)%grid;
-
-  const offsetY =
-    H/2 - (player.y*0.7)%grid;
-
-
-  for(
-    let x=offsetX;
-    x<W;
-    x+=grid
-  ){
-
-    ctx.beginPath();
-    ctx.moveTo(x,0);
-    ctx.lineTo(x,H);
-    ctx.stroke();
-
-  }
-
-
-  for(
-    let y=offsetY;
-    y<H;
-    y+=grid
-  ){
-
-    ctx.beginPath();
-    ctx.moveTo(0,y);
-    ctx.lineTo(W,y);
-    ctx.stroke();
-
-  }
-
-
-  /* جاده */
-
-  ctx.fillStyle="#3b3f43";
-
-  ctx.fillRect(
-    W/2-150,
-    0,
-    300,
-    H
-  );
-
-  /* خط وسط جاده */
-
-  ctx.strokeStyle="#ddd";
-  ctx.lineWidth=3;
-  ctx.setLineDash([25,25]);
-
-  ctx.beginPath();
-  ctx.moveTo(W/2,0);
-  ctx.lineTo(W/2,H);
-  ctx.stroke();
-
-  ctx.setLineDash([]);
-
-}
-
-
-/* -------------------------
-   اطلاعات
-------------------------- */
-
-function drawHUD(){
-
-  ctx.fillStyle="rgba(10,15,20,.82)";
-  ctx.fillRect(
-    10,
-    H-105,
-    155,
-    60
-  );
-
-  ctx.fillStyle="white";
-  ctx.font="14px Arial";
-
-  ctx.fillText(
-    "سرعت: "+
-    Math.max(0,Math.round(player.speed))+
-    " km/h",
-    20,
-    H-78
-  );
-
-  ctx.fillText(
-    otherVisible ?
-    "🟢 بازیکن آنلاین" :
-    "🔵 حالت تک‌نفره",
-    20,
-    H-55
-  );
-
-}
-
-
-/* -------------------------
-   آنلاین
-------------------------- */
-
-let peer = null;
-let connection = null;
-
-
-/*
-  ساخت اتاق
-*/
-
-document.getElementById("createRoom").onclick = function(){
-
-  if(peer){
-    peer.destroy();
-  }
-
-  statusText.textContent="در حال ساخت اتاق...";
-
-  peer = new Peer();
-
-  peer.on("open",id=>{
-
-    roomCode.value=id;
-
-    statusText.textContent=
-      "اتاق ساخته شد؛ کد را برای دوستت بفرست";
-
-  });
-
-
-  peer.on("connection",conn=>{
-
-    connection=conn;
-
-    setupConnection();
-
-  });
-
-
-  peer.on("error",()=>{
-
-    statusText.textContent=
-      "خطا در ساخت اتاق";
-
-  });
-
-};
-
-
-/*
-  ورود به اتاق
-*/
-
-document.getElementById("joinRoom").onclick=function(){
-
-  const code=roomCode.value.trim();
-
-  if(!code){
-
-    statusText.textContent=
-      "کد اتاق را وارد کن";
-
-    return;
-
-  }
-
-  if(peer){
-    peer.destroy();
-  }
-
-  statusText.textContent=
-    "در حال اتصال...";
-
-  peer=new Peer();
-
-  peer.on("open",()=>{
-
-    connection=
-      peer.connect(code);
-
-    setupConnection();
-
-  });
-
-  peer.on("error",()=>{
-
-    statusText.textContent=
-      "اتصال ناموفق بود";
-
-  });
-
-};
-
-
-/*
-  تنظیم ارتباط
-*/
-
-function setupConnection(){
-
-  if(!connection)
-    return;
-
-
-  connection.on("open",()=>{
-
-    statusText.textContent=
-      "🟢 آنلاین";
-
-  });
-
-
-  connection.on("data",data=>{
-
-    if(
-      data &&
-      typeof data.x==="number"
-    ){
-
-      otherPlayer.x=data.x;
-      otherPlayer.y=data.y;
-      otherPlayer.angle=data.angle;
-      otherPlayer.speed=data.speed;
-
-      otherVisible=true;
-
-    }
-
-  });
-
-
-  connection.on("close",()=>{
-
-    otherVisible=false;
-
-    statusText.textContent=
-      "ارتباط قطع شد";
-
-  });
-
-}
-
-
-/*
-  ارسال موقعیت
-*/
-
-let lastSend=0;
-
-function sendPosition(time){
+  /* friction */
 
   if(
-    connection &&
-    connection.open &&
-    time-lastSend>70
+    !controls.gas &&
+    !controls.brake
   ){
 
-    connection.send({
+    if(speed>0)
+      speed -= friction*dt;
 
-      x:player.x,
-      y:player.y,
-      angle:player.angle,
-      speed:player.speed
-
-    });
-
-    lastSend=time;
-
+    if(speed<0)
+      speed += friction*dt;
   }
 
-}
-
-
-/* -------------------------
-   حلقه بازی
-------------------------- */
-
-let previousTime=performance.now();
-
-function gameLoop(time){
-
-  const dt=
-    Math.min(
-      (time-previousTime)/1000,
-      0.04
+  speed =
+    THREE.MathUtils.clamp(
+      speed,
+      0,
+      maxSpeed
     );
 
-  previousTime=time;
+  /* steering */
 
-  updateCar(dt);
+  let targetSteering = 0;
 
-  drawWorld();
+  if(controls.left)
+    targetSteering = 1;
 
-  if(otherVisible){
+  if(controls.right)
+    targetSteering = -1;
 
-    drawCar(
-      otherPlayer.x,
-      otherPlayer.y,
-      otherPlayer.angle,
-      "دوست",
-      "other"
+  steering =
+    THREE.MathUtils.lerp(
+      steering,
+      targetSteering,
+      0.12
     );
 
+  if(speed>1){
+
+    car.rotation.y +=
+      steering *
+      0.8 *
+      dt *
+      (speed/maxSpeed);
   }
 
-  drawCar(
-    player.x,
-    player.y,
-    player.angle,
-    "تو",
-    "player"
+  /* movement */
+
+  car.translateZ(
+    -speed*dt
   );
 
-  drawHUD();
+  /* keep car on road */
 
-  sendPosition(time);
+  car.position.x =
+    THREE.MathUtils.clamp(
+      car.position.x,
+      -7,
+      7
+    );
 
-  requestAnimationFrame(gameLoop);
+  /* speed display */
 
+  speedText.textContent =
+    "سرعت: "+
+    Math.round(speed*2)+
+    " km/h";
 }
 
-requestAnimationFrame(gameLoop);
+/* -------------------------
+   Camera
+------------------------- */
+
+function updateCamera(){
+
+  const target =
+    new THREE.Vector3();
+
+  target.set(
+    car.position.x,
+    car.position.y+5.2,
+    car.position.z+10
+  );
+
+  camera.position.lerp(
+    target,
+    0.08
+  );
+
+  const look =
+    new THREE.Vector3(
+      car.position.x,
+      0.8,
+      car.position.z-8
+    );
+
+  camera.lookAt(look);
+}
+
+/* -------------------------
+   Loop
+------------------------- */
+
+let last =
+  performance.now();
+
+function animate(now){
+
+  requestAnimationFrame(
+    animate
+  );
+
+  const dt =
+    Math.min(
+      (now-last)/1000,
+      0.05
+    );
+
+  last = now;
+
+  updateCar(dt);
+  updateCamera();
+
+  renderer.render(
+    scene,
+    camera
+  );
+}
+
+animate(last);
+
+/* -------------------------
+   Resize
+------------------------- */
+
+addEventListener(
+  "resize",
+  ()=>{
+    camera.aspect =
+      innerWidth/innerHeight;
+
+    camera.updateProjectionMatrix();
+
+    renderer.setSize(
+      innerWidth,
+      innerHeight
+    );
+  }
+);
 
 </script>
 
