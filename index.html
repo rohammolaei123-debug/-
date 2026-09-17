@@ -1,0 +1,744 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Roham Car Game V1</title>
+
+<style>
+*{
+  box-sizing:border-box;
+  -webkit-tap-highlight-color:transparent;
+}
+
+html,body{
+  margin:0;
+  width:100%;
+  height:100%;
+  overflow:hidden;
+  background:#20252b;
+  font-family:Arial,sans-serif;
+  touch-action:none;
+}
+
+canvas{
+  display:block;
+  width:100%;
+  height:100%;
+}
+
+#top{
+  position:fixed;
+  top:10px;
+  left:10px;
+  right:10px;
+  display:flex;
+  justify-content:space-between;
+  align-items:flex-start;
+  z-index:10;
+}
+
+.panel{
+  background:rgba(15,20,25,.88);
+  color:white;
+  padding:10px;
+  border-radius:12px;
+  font-size:13px;
+}
+
+button,input{
+  font:inherit;
+}
+
+button{
+  border:0;
+  border-radius:10px;
+  padding:10px 13px;
+  font-weight:bold;
+  background:#eee;
+  color:#111;
+}
+
+input{
+  width:100px;
+  padding:10px;
+  border:1px solid #777;
+  border-radius:10px;
+  background:#111820;
+  color:white;
+  text-align:center;
+}
+
+#controls{
+  position:fixed;
+  left:0;
+  right:0;
+  bottom:18px;
+  display:flex;
+  justify-content:space-between;
+  padding:0 18px;
+  z-index:20;
+  pointer-events:none;
+}
+
+.group{
+  display:flex;
+  gap:10px;
+  pointer-events:auto;
+}
+
+.control{
+  width:72px;
+  height:72px;
+  border-radius:50%;
+  background:rgba(10,15,20,.82);
+  color:white;
+  border:2px solid rgba(255,255,255,.25);
+  font-size:24px;
+  touch-action:none;
+}
+
+.control.big{
+  width:82px;
+  border-radius:20px;
+  font-size:15px;
+}
+
+.control:active{
+  transform:scale(.94);
+}
+</style>
+</head>
+
+<body>
+
+<canvas id="game"></canvas>
+
+<div id="top">
+
+  <div class="panel">
+    <b>Roham Car Game V1</b><br>
+    <span id="status">حالت تک‌نفره</span>
+  </div>
+
+  <div class="panel">
+    <button id="createRoom">ساخت اتاق</button>
+    <input id="roomCode" placeholder="کد اتاق">
+    <button id="joinRoom">ورود</button>
+  </div>
+
+</div>
+
+<div id="controls">
+
+  <div class="group">
+    <button class="control" id="left">◀</button>
+    <button class="control" id="right">▶</button>
+  </div>
+
+  <div class="group">
+    <button class="control big" id="brake">ترمز</button>
+    <button class="control big" id="gas">گاز</button>
+  </div>
+
+</div>
+
+<!-- ارتباط آزمایشی آنلاین -->
+<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+
+<script>
+
+const canvas = document.getElementById("game");
+const ctx = canvas.getContext("2d");
+
+const statusText = document.getElementById("status");
+const roomCode = document.getElementById("roomCode");
+
+let W = 0;
+let H = 0;
+
+function resize(){
+
+  W = window.innerWidth;
+  H = window.innerHeight;
+
+  canvas.width = W * devicePixelRatio;
+  canvas.height = H * devicePixelRatio;
+
+  canvas.style.width = W + "px";
+  canvas.style.height = H + "px";
+
+  ctx.setTransform(
+    devicePixelRatio,
+    0,
+    0,
+    devicePixelRatio,
+    0,
+    0
+  );
+}
+
+window.addEventListener("resize",resize);
+resize();
+
+
+/* -------------------------
+   کنترل‌ها
+------------------------- */
+
+const controls = {
+  left:false,
+  right:false,
+  gas:false,
+  brake:false
+};
+
+function controlButton(id,name){
+
+  const button = document.getElementById(id);
+
+  button.addEventListener("pointerdown",e=>{
+    e.preventDefault();
+    controls[name]=true;
+  });
+
+  button.addEventListener("pointerup",e=>{
+    e.preventDefault();
+    controls[name]=false;
+  });
+
+  button.addEventListener("pointercancel",()=>{
+    controls[name]=false;
+  });
+
+  button.addEventListener("pointerleave",()=>{
+    controls[name]=false;
+  });
+}
+
+controlButton("left","left");
+controlButton("right","right");
+controlButton("gas","gas");
+controlButton("brake","brake");
+
+
+/* -------------------------
+   ماشین بازیکن
+------------------------- */
+
+const player = {
+
+  x:0,
+  y:0,
+  angle:0,
+  speed:0
+
+};
+
+
+/* -------------------------
+   ماشین دوست
+------------------------- */
+
+const otherPlayer = {
+
+  x:200,
+  y:0,
+  angle:0,
+  speed:0
+
+};
+
+let otherVisible = false;
+
+
+/* -------------------------
+   فیزیک ساده ماشین
+------------------------- */
+
+function updateCar(dt){
+
+  let acceleration = 0;
+
+  if(controls.gas){
+    acceleration = 180;
+  }
+
+  if(controls.brake){
+    acceleration = -260;
+  }
+
+  player.speed += acceleration * dt;
+
+  /* اصطکاک */
+
+  if(!controls.gas && !controls.brake){
+
+    if(player.speed > 0)
+      player.speed -= 45 * dt;
+
+    if(player.speed < 0)
+      player.speed += 45 * dt;
+
+  }
+
+  /* محدودیت سرعت */
+
+  player.speed = Math.max(
+    -80,
+    Math.min(300,player.speed)
+  );
+
+
+  /* فرمان */
+
+  let steering = 0;
+
+  if(controls.left)
+    steering -= 1;
+
+  if(controls.right)
+    steering += 1;
+
+
+  if(Math.abs(player.speed) > 5){
+
+    player.angle +=
+      steering *
+      1.8 *
+      dt *
+      Math.min(Math.abs(player.speed)/100,1.5);
+
+  }
+
+
+  /* حرکت */
+
+  player.x +=
+    Math.sin(player.angle) *
+    player.speed *
+    dt;
+
+  player.y -=
+    Math.cos(player.angle) *
+    player.speed *
+    dt;
+
+}
+
+
+/* -------------------------
+   رسم ماشین
+------------------------- */
+
+function drawCar(x,y,angle,label,type){
+
+  ctx.save();
+
+  /*
+    دوربین بازیکن را وسط صفحه نگه می‌داریم
+  */
+
+  const screenX =
+    W/2 + (x-player.x)*0.7;
+
+  const screenY =
+    H/2 + (y-player.y)*0.7;
+
+  ctx.translate(screenX,screenY);
+
+  ctx.rotate(angle);
+
+  /* سایه */
+
+  ctx.fillStyle="rgba(0,0,0,.35)";
+  ctx.fillRect(-18,-32,36,64);
+
+  /* بدنه */
+
+  if(type==="player")
+    ctx.fillStyle="#18a7ff";
+  else
+    ctx.fillStyle="#ff9f1c";
+
+  ctx.fillRect(-15,-28,30,56);
+
+  /* شیشه */
+
+  ctx.fillStyle="#17212b";
+  ctx.fillRect(-11,-17,22,15);
+
+  /* چرخ‌ها */
+
+  ctx.fillStyle="#080b0d";
+
+  ctx.fillRect(-19,-20,6,14);
+  ctx.fillRect(13,-20,6,14);
+
+  ctx.fillRect(-19,8,6,14);
+  ctx.fillRect(13,8,6,14);
+
+  /* چراغ‌ها */
+
+  ctx.fillStyle="#fff";
+  ctx.fillRect(-10,-29,7,4);
+  ctx.fillRect(3,-29,7,4);
+
+  /* نام */
+
+  ctx.fillStyle="white";
+  ctx.font="bold 12px Arial";
+  ctx.textAlign="center";
+  ctx.fillText(label,0,-40);
+
+  ctx.restore();
+
+}
+
+
+/* -------------------------
+   محیط
+------------------------- */
+
+function drawWorld(){
+
+  ctx.fillStyle="#344b35";
+  ctx.fillRect(0,0,W,H);
+
+  /*
+    خطوط زمین
+  */
+
+  ctx.strokeStyle="#526d54";
+  ctx.lineWidth=2;
+
+  const grid=100;
+
+  const offsetX =
+    W/2 - (player.x*0.7)%grid;
+
+  const offsetY =
+    H/2 - (player.y*0.7)%grid;
+
+
+  for(
+    let x=offsetX;
+    x<W;
+    x+=grid
+  ){
+
+    ctx.beginPath();
+    ctx.moveTo(x,0);
+    ctx.lineTo(x,H);
+    ctx.stroke();
+
+  }
+
+
+  for(
+    let y=offsetY;
+    y<H;
+    y+=grid
+  ){
+
+    ctx.beginPath();
+    ctx.moveTo(0,y);
+    ctx.lineTo(W,y);
+    ctx.stroke();
+
+  }
+
+
+  /* جاده */
+
+  ctx.fillStyle="#3b3f43";
+
+  ctx.fillRect(
+    W/2-150,
+    0,
+    300,
+    H
+  );
+
+  /* خط وسط جاده */
+
+  ctx.strokeStyle="#ddd";
+  ctx.lineWidth=3;
+  ctx.setLineDash([25,25]);
+
+  ctx.beginPath();
+  ctx.moveTo(W/2,0);
+  ctx.lineTo(W/2,H);
+  ctx.stroke();
+
+  ctx.setLineDash([]);
+
+}
+
+
+/* -------------------------
+   اطلاعات
+------------------------- */
+
+function drawHUD(){
+
+  ctx.fillStyle="rgba(10,15,20,.82)";
+  ctx.fillRect(
+    10,
+    H-105,
+    155,
+    60
+  );
+
+  ctx.fillStyle="white";
+  ctx.font="14px Arial";
+
+  ctx.fillText(
+    "سرعت: "+
+    Math.max(0,Math.round(player.speed))+
+    " km/h",
+    20,
+    H-78
+  );
+
+  ctx.fillText(
+    otherVisible ?
+    "🟢 بازیکن آنلاین" :
+    "🔵 حالت تک‌نفره",
+    20,
+    H-55
+  );
+
+}
+
+
+/* -------------------------
+   آنلاین
+------------------------- */
+
+let peer = null;
+let connection = null;
+
+
+/*
+  ساخت اتاق
+*/
+
+document.getElementById("createRoom").onclick = function(){
+
+  if(peer){
+    peer.destroy();
+  }
+
+  statusText.textContent="در حال ساخت اتاق...";
+
+  peer = new Peer();
+
+  peer.on("open",id=>{
+
+    roomCode.value=id;
+
+    statusText.textContent=
+      "اتاق ساخته شد؛ کد را برای دوستت بفرست";
+
+  });
+
+
+  peer.on("connection",conn=>{
+
+    connection=conn;
+
+    setupConnection();
+
+  });
+
+
+  peer.on("error",()=>{
+
+    statusText.textContent=
+      "خطا در ساخت اتاق";
+
+  });
+
+};
+
+
+/*
+  ورود به اتاق
+*/
+
+document.getElementById("joinRoom").onclick=function(){
+
+  const code=roomCode.value.trim();
+
+  if(!code){
+
+    statusText.textContent=
+      "کد اتاق را وارد کن";
+
+    return;
+
+  }
+
+  if(peer){
+    peer.destroy();
+  }
+
+  statusText.textContent=
+    "در حال اتصال...";
+
+  peer=new Peer();
+
+  peer.on("open",()=>{
+
+    connection=
+      peer.connect(code);
+
+    setupConnection();
+
+  });
+
+  peer.on("error",()=>{
+
+    statusText.textContent=
+      "اتصال ناموفق بود";
+
+  });
+
+};
+
+
+/*
+  تنظیم ارتباط
+*/
+
+function setupConnection(){
+
+  if(!connection)
+    return;
+
+
+  connection.on("open",()=>{
+
+    statusText.textContent=
+      "🟢 آنلاین";
+
+  });
+
+
+  connection.on("data",data=>{
+
+    if(
+      data &&
+      typeof data.x==="number"
+    ){
+
+      otherPlayer.x=data.x;
+      otherPlayer.y=data.y;
+      otherPlayer.angle=data.angle;
+      otherPlayer.speed=data.speed;
+
+      otherVisible=true;
+
+    }
+
+  });
+
+
+  connection.on("close",()=>{
+
+    otherVisible=false;
+
+    statusText.textContent=
+      "ارتباط قطع شد";
+
+  });
+
+}
+
+
+/*
+  ارسال موقعیت
+*/
+
+let lastSend=0;
+
+function sendPosition(time){
+
+  if(
+    connection &&
+    connection.open &&
+    time-lastSend>70
+  ){
+
+    connection.send({
+
+      x:player.x,
+      y:player.y,
+      angle:player.angle,
+      speed:player.speed
+
+    });
+
+    lastSend=time;
+
+  }
+
+}
+
+
+/* -------------------------
+   حلقه بازی
+------------------------- */
+
+let previousTime=performance.now();
+
+function gameLoop(time){
+
+  const dt=
+    Math.min(
+      (time-previousTime)/1000,
+      0.04
+    );
+
+  previousTime=time;
+
+  updateCar(dt);
+
+  drawWorld();
+
+  if(otherVisible){
+
+    drawCar(
+      otherPlayer.x,
+      otherPlayer.y,
+      otherPlayer.angle,
+      "دوست",
+      "other"
+    );
+
+  }
+
+  drawCar(
+    player.x,
+    player.y,
+    player.angle,
+    "تو",
+    "player"
+  );
+
+  drawHUD();
+
+  sendPosition(time);
+
+  requestAnimationFrame(gameLoop);
+
+}
+
+requestAnimationFrame(gameLoop);
+
+</script>
+
+</body>
+</html>
